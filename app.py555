@@ -1,0 +1,77 @@
+# `share=True` creates a public URL for easy sharing (useful for hackathons!).
+if __name__ == "__main__":idanimport gradio as gr
+from transformers import pipeline
+
+# --- Model Loading ---
+# This function loads the pre-trained model and tokenizer from Hugging Face.
+# It uses the high-level `pipeline` for ease of use.
+# It's recommended to run this on a GPU for faster performance.
+try:
+    print("Loading model...")
+    # Using the pipeline for text generation with the specified IBM Granite model.
+    # The device mapping handles loading the model onto a GPU if available.
+    pipe = pipeline("text-generation", model="ibm-granite/granite-3.3-2b-base", device_map="auto")
+    print("Model loaded successfully.")
+except Exception as e:
+    print(f"Error loading model: {e}")
+    print("Attempting to load without device_map. This might be slow.")
+    pipe = pipeline("text-generation", model="ibm-granite/granite-3.3-2b-base")
+
+
+# --- Chatbot Logic ---
+def get_chatbot_response(user_query, user_type):
+    """
+    Generates a personalized financial response based on the user's query and demographic.
+
+    Args:
+        user_query (str): The financial question from the user.
+        user_type (str): The user's demographic, either 'Student' or 'Professional'.
+
+    Returns:
+        str: The generated financial advice.
+    """
+    # Create a dynamic prompt to guide the model's tone and complexity.
+    # This is a core part of the "personalized" solution.
+    if user_type == "Student":
+        system_prompt = "You are a friendly, easy-to-understand financial coach for a college student. Explain financial concepts simply and give practical, low-risk advice."
+    elif user_type == "Professional":
+        system_prompt = "You are a professional, knowledgeable financial analyst. Provide sophisticated and detailed financial guce, using professional terminology where appropriate."
+    else:
+        system_prompt = "You are a helpful personal finance assistant. Provide clear and concise advice."
+
+    # Combine the system prompt and the user's query into a full prompt for the model.
+    full_prompt = f"{system_prompt}\n\nUser: {user_query}\n\nAssistant:"
+
+    # Generate text using the pre-loaded pipeline.
+    # We use `max_new_tokens` to control the length of the response.
+    # `do_sample=True` enables more creative and varied responses.
+    generated_text = pipe(full_prompt, max_new_tokens=256, do_sample=True)[0]['generated_text']
+
+    # Extract the assistant's response from the full generated text.
+    # The response will likely contain the original prompt, so we clean it up.
+    response_start_index = generated_text.find("Assistant:") + len("Assistant:")
+    response_text = generated_text[response_start_index:].strip()
+
+    return response_text
+
+
+# --- Gradio Interface Setup ---
+# Define the Gradio interface to create the web-based UI.
+# This makes it easy for anyone to interact with your application.
+chatbot_interface = gr.Interface(
+    fn=get_chatbot_response,
+    inputs=[
+        gr.Textbox(lines=5, label="Enter your financial question here...", placeholder="e.g., How can I save money on a student budget? or What are the tax implications of long-term capital gains?"),
+        gr.Radio(["Student", "Professional"], label="Select your profile to get personalized advice.")
+    ],
+    outputs=gr.Textbox(label="Financial Guidance", lines=10),
+    title="Intelligent Personal Finance Chatbot",
+    description=(
+        "Ask me anything about savings, taxes, or investments! "
+        "I'll adapt my advice based on your profile (Student or Professional)."
+    ),
+    theme=gr.themes.Soft()
+)
+
+# Launch the Gradio application.
+    chatbot_interface.launch(debug=True)
